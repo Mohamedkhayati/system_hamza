@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym Management System</title>
+    <link rel="stylesheet" href="styles.css">
+    <script defer src="script.js"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <ul class="nav-bar">
+                <li><a href="afficher.php">Afficher</a></li>
+                <li><a href="ajouter.php">Ajouter</a></li>
+                <li><a href="non_active.php">Non Active</a></li>
+                <li><a href="update_subscriptions.php">Mise a jour </a></li>
+
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="search-bar">
+            <form method="GET" action="afficher.php">
+                <input type="text" name="search-name" placeholder="Chercher par nom">
+                <button type="submit">Rechercher</button>
+            </form>
+        </section>
+
+        <section id="content">
+            <!-- Multiple Images Section -->
+            <div class="image-gallery">
+                <div class="image-item">
+                    <img src="1.jpg" alt="Gym Image 1">
+                </div>
+                <div class="image-item">
+                    <img src="2.jfif" alt="Gym Image 2">
+                </div>
+                <div class="image-item">
+                    <img src="3.jfif" alt="Gym Image 3">
+                </div>
+                <div class="image-item">
+                    <img src="4.jfif" alt="Gym Image 4">
+                </div>
+                <div class="image-item">
+                    <img src="5.jfif" alt="Gym Image 5">
+                </div>
+                <div class="image-item">
+                    <img src="6.jfif" alt="Gym Image 6">
+                </div>
+                <!-- Add more image items as needed -->
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Gym Management System</p>
+    </footer>
+</body>
+</html>
