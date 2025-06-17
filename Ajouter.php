@@ -1,29 +1,52 @@
 <?php
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $conn = new mysqli('localhost', 'root', '', 'gym_management');
-    if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+$conn = new mysqli('localhost', 'root', '', 'gym_management');
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
 
+$error = '';
+$success = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = $_POST['name'];
     $number = $_POST['number'];
     $age = $_POST['age'];
     $start_date = $_POST['start_date'];
     $months = intval($_POST['months']);
 
-    // Calculate end_date by adding the selected number of months to start_date
+    // Calculate end_date
     $end_date = date('Y-m-d', strtotime("+$months months", strtotime($start_date)));
-
     $today = date('Y-m-d');
     $active = ($end_date >= $today) ? 1 : 0;
 
-    $query = "INSERT INTO subscribers (name, number, age, start_date, end_date, active) 
-              VALUES ('$name', '$number', $age, '$start_date', '$end_date', $active)";
+    // Handle photo upload
+    $photo = null;
+    if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+        $allowed_types = ['image/jpeg', 'image/png'];
+        $max_size = 2 * 1024 * 1024; // 2MB
+        if (in_array($_FILES['photo']['type'], $allowed_types) && $_FILES['photo']['size'] <= $max_size) {
+            $photo = file_get_contents($_FILES['photo']['tmp_name']);
+        } else {
+            $error = "Invalid photo format or size. Only JPEG/PNG up to 2MB allowed.";
+        }
+    }
 
-    if ($conn->query($query)) {
-        echo "Subscriber added successfully!";
-    } else {
-        echo "Error: " . $conn->error;
+    if (!$error) {
+        $query = "INSERT INTO subscribers (name, number, age, start_date, end_date, active, photo) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        $stmt = $conn->prepare($query);
+        $null = null;
+        $stmt->bind_param("siissib", $name, $number, $age, $start_date, $end_date, $active, $null);
+        if ($photo) {
+            $stmt->send_long_data(6, $photo);
+        }
+        if ($stmt->execute()) {
+            $success = "Subscriber added successfully!";
+        } else {
+            $error = "Error adding subscriber: " . $conn->error;
+        }
+        $stmt->close();
     }
 }
+$conn->close();
 ?>
 
 <!DOCTYPE html>
@@ -81,21 +104,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #333;
             margin: 0;
         }
-
         nav ul li {
             display: inline;
             margin-right: 20px;
         }
-
         nav ul li a {
             color: white;
             text-decoration: none;
             padding: 10px 20px;
             display: inline-block;
         }
-
         nav ul li a:hover {
             background-color: #575757;
+        }
+        .error {
+            color: red;
+            text-align: center;
+        }
+        .success {
+            color: green;
+            text-align: center;
         }
     </style>
 </head>
@@ -109,11 +137,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </nav>
 
 <h1>Add Subscriber</h1>
-<form method="POST">
+<?php if ($error): ?>
+    <p class="error"><?= htmlspecialchars($error) ?></p>
+<?php endif; ?>
+<?php if ($success): ?>
+    <p class="success"><?= htmlspecialchars($success) ?></p>
+<?php endif; ?>
+<form method="POST" enctype="multipart/form-data">
     <label>Name: <input type="text" name="name" required></label>
     <label>Number: <input type="number" name="number" required></label>
     <label>Age: <input type="number" name="age" required></label>
     <label>Start Date: <input type="date" name="start_date" required></label>
+    <label>Photo (JPEG/PNG, max 2MB): <input type="file" name="photo" accept="image/jpeg,image/png"></label>
     <label>Duration (in months): 
         <select name="months" required>
             <option value="1">1 Month</option>
