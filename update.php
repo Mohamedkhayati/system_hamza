@@ -23,11 +23,9 @@ if (isset($_POST['id'])) {
         $start_date = $_POST['start_date'];
         $months = intval($_POST['months']);
 
-        // Calculate new end date
-        $current_end_date = new DateTime($subscriber['end_date']);
-        $current_end_date->modify("+$months months");
-        $new_end_date = $current_end_date->format('Y-m-d');
-        $active = ($new_end_date >= date('Y-m-d')) ? 1 : 0;
+        // Calculate end date based on start date and months
+        $end_date = (new DateTime($start_date))->modify("+$months months")->format('Y-m-d');
+        $active = ($end_date >= date('Y-m-d')) ? 1 : 0;
 
         // Handle photo upload
         $photo = $subscriber['photo'];
@@ -45,12 +43,12 @@ if (isset($_POST['id'])) {
             $update_query = "UPDATE subscribers SET name = ?, number = ?, age = ?, start_date = ?, end_date = ?, active = ?, photo = ? WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
             $null = null;
-            $update_stmt->bind_param("siissibi", $name, $number, $age, $start_date, $new_end_date, $active, $null, $id);
+            $update_stmt->bind_param("siissibi", $name, $number, $age, $start_date, $end_date, $active, $null, $id);
             if ($photo) {
                 $update_stmt->send_long_data(6, $photo);
             }
             if ($update_stmt->execute()) {
-                $success = "Subscriber updated successfully! Subscription renewed by $months month(s).";
+                $success = "Subscriber updated successfully! Subscription set for $months month(s).";
             } else {
                 $error = "Error updating subscriber: " . $conn->error;
             }
@@ -148,6 +146,18 @@ $conn->close();
             text-align: center;
         }
     </style>
+    <script>
+        function updateEndDate() {
+            const startDateInput = document.getElementById('start_date').value;
+            const monthsSelect = document.getElementById('months').value;
+            if (startDateInput && monthsSelect) {
+                const startDate = new Date(startDateInput);
+                startDate.setMonth(startDate.getMonth() + parseInt(monthsSelect));
+                const endDateInput = document.getElementById('end_date');
+                endDateInput.value = startDate.toISOString().split('T')[0];
+            }
+        }
+    </script>
 </head>
 <body>
 <nav>
@@ -173,8 +183,17 @@ $conn->close();
     <input type="number" name="number" value="<?= $subscriber['number'] ?>" required><br><br>
     <label for="age">Age:</label>
     <input type="number" name="age" value="<?= $subscriber['age'] ?>" required><br><br>
+    <label for="months">Subscription Period:</label>
+    <select name="months" id="months" onchange="updateEndDate()" required>
+        <option value="1">1 Month</option>
+        <option value="3">3 Months</option>
+        <option value="6">6 Months</option>
+        <option value="12">12 Months</option>
+    </select><br><br>
     <label for="start_date">Start Date:</label>
-    <input type="date" name="start_date" value="<?= $subscriber['start_date'] ?>" required><br><br>
+    <input type="date" id="start_date" name="start_date" value="<?= $subscriber['start_date'] ?>" oninput="updateEndDate()" required><br><br>
+    <label for="end_date">End Date:</label>
+    <input type="date" id="end_date" name="end_date" value="<?= $subscriber['end_date'] ?>" readonly><br><br>
     <label for="photo">Current Photo:</label>
     <?php if ($subscriber['photo']): ?>
         <img src="data:image/jpeg;base64,<?= base64_encode($subscriber['photo']) ?>" class="current-photo" alt="Current Photo"><br>
@@ -183,14 +202,7 @@ $conn->close();
     <?php endif; ?>
     <label for="photo">Upload New Photo (JPEG/PNG, max 2MB, optional):</label>
     <input type="file" name="photo" accept="image/jpeg,image/png"><br><br>
-    <label for="months">Renewal Period (Months):</label>
-    <select name="months" required>
-        <option value="1">1 Month</option>
-        <option value="3">3 Months</option>
-        <option value="6">6 Months</option>
-        <option value="12">12 Months</option>
-    </select><br><br>
-    <button type="submit">Renew Subscription</button>
+    <button type="submit">Update Subscription</button>
 </form>
 
 <p><a href="afficher.php">Back to Subscribers List</a></p>
