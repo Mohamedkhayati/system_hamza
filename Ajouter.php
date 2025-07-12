@@ -20,12 +20,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Handle photo upload
     $photo = null;
-    if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+    if (isset($_POST['photo_data']) && !empty($_POST['photo_data'])) {
+        $photo_data = $_POST['photo_data'];
+        // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+        $photo_data = preg_replace('#^data:image/\w+;base64,#i', '', $photo_data);
+        $photo = base64_decode($photo_data);
         $allowed_types = ['image/jpeg', 'image/png'];
+        $finfo = finfo_open();
+        $mime_type = finfo_buffer($finfo, $photo, FILEINFO_MIME_TYPE);
+        finfo_close($finfo);
         $max_size = 2 * 1024 * 1024; // 2MB
-        if (in_array($_FILES['photo']['type'], $allowed_types) && $_FILES['photo']['size'] <= $max_size) {
-            $photo = file_get_contents($_FILES['photo']['tmp_name']);
-        } else {
+        if (!in_array($mime_type, $allowed_types) || strlen($photo) > $max_size) {
             $error = "Invalid photo format or size. Only JPEG/PNG up to 2MB allowed.";
         }
     }
@@ -125,6 +130,37 @@ $conn->close();
             color: green;
             text-align: center;
         }
+        #video {
+            width: 100%;
+            max-height: 300px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #canvas {
+            display: none;
+        }
+        #capture {
+            width: 100%;
+            padding: 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        #capture:hover {
+            background-color: #0056b3;
+        }
+        #captured-image {
+            width: 100%;
+            max-height: 300px;
+            margin-bottom: 15px;
+            display: none;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -148,7 +184,12 @@ $conn->close();
     <label>Number: <input type="number" name="number" required></label>
     <label>Age: <input type="number" name="age" required></label>
     <label>Start Date: <input type="date" name="start_date" required></label>
-    <label>Photo (JPEG/PNG, max 2MB): <input type="file" name="photo" accept="image/jpeg,image/png"></label>
+    <label>Photo (JPEG/PNG, max 2MB):</label>
+    <video id="video" autoplay></video>
+    <canvas id="canvas"></canvas>
+    <img id="captured-image" alt="Captured Image">
+    <input type="hidden" name="photo_data" id="photo_data">
+    <button type="button" id="capture">Capture Photo</button>
     <label>Duration (in months): 
         <select name="months" required>
             <option value="1">1 Month</option>
@@ -159,6 +200,37 @@ $conn->close();
     </label>
     <button type="submit">Add Subscriber</button>
 </form>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureButton = document.getElementById('capture');
+    const capturedImage = document.getElementById('captured-image');
+    const photoDataInput = document.getElementById('photo_data');
+
+    // Access the camera
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            video.srcObject = stream;
+        })
+        .catch(err => {
+            console.error("Error accessing camera: ", err);
+            alert("Could not access the camera. Please ensure camera permissions are granted.");
+        });
+
+    // Capture photo
+    captureButton.addEventListener('click', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const imageData = canvas.toDataURL('image/jpeg', 0.8); // JPEG, 80% quality
+        capturedImage.src = imageData;
+        capturedImage.style.display = 'block';
+        video.style.display = 'none';
+        captureButton.style.display = 'none';
+        photoDataInput.value = imageData;
+    });
+</script>
 
 </body>
 </html>
