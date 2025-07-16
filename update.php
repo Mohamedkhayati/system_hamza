@@ -1,68 +1,3 @@
-<?php
-$conn = new mysqli('localhost', 'root', '', 'gym_management');
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-
-$error = '';
-$success = '';
-if (isset($_POST['id'])) {
-    $id = $_POST['id'];
-    $query = "SELECT * FROM subscribers WHERE id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $subscriber = $result->fetch_assoc();
-    $stmt->close();
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['name'])) {
-        $name = $_POST['name'];
-        $number = $_POST['number'];
-        $age = $_POST['age'];
-        $start_date = $_POST['start_date'];
-        $months = intval($_POST['months']);
-
-        // Calculate end date based on start date and months
-        $end_date = (new DateTime($start_date))->modify("+$months months")->format('Y-m-d');
-        $active = ($end_date >= date('Y-m-d')) ? 1 : 0;
-
-        // Handle photo upload
-        $photo = $subscriber['photo'];
-        if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
-            $allowed_types = ['image/jpeg', 'image/png'];
-            $max_size = 2 * 1024 * 1024; // 2MB
-            if (in_array($_FILES['photo']['type'], $allowed_types) && $_FILES['photo']['size'] <= $max_size) {
-                $photo = file_get_contents($_FILES['photo']['tmp_name']);
-            } else {
-                $error = "Invalid photo format or size. Only JPEG/PNG up to 2MB allowed.";
-            }
-        }
-
-        if (!$error) {
-            $update_query = "UPDATE subscribers SET name = ?, number = ?, age = ?, start_date = ?, end_date = ?, active = ?, photo = ? WHERE id = ?";
-            $update_stmt = $conn->prepare($update_query);
-            $null = null;
-            $update_stmt->bind_param("siissibi", $name, $number, $age, $start_date, $end_date, $active, $null, $id);
-            if ($photo) {
-                $update_stmt->send_long_data(6, $photo);
-            }
-            if ($update_stmt->execute()) {
-                $success = "Subscriber updated successfully! Subscription set for $months month(s).";
-            } else {
-                $error = "Error updating subscriber: " . $conn->error;
-            }
-            $update_stmt->close();
-        }
-    }
-} else {
-    echo "<p>No subscriber ID provided.</p>";
-    $conn->close();
-    exit();
-}
-$conn->close();
-?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -146,20 +81,74 @@ $conn->close();
             text-align: center;
         }
     </style>
-    <script>
-        function updateEndDate() {
-            const startDateInput = document.getElementById('start_date').value;
-            const monthsSelect = document.getElementById('months').value;
-            if (startDateInput && monthsSelect) {
-                const startDate = new Date(startDateInput);
-                startDate.setMonth(startDate.getMonth() + parseInt(monthsSelect));
-                const endDateInput = document.getElementById('end_date');
-                endDateInput.value = startDate.toISOString().split('T')[0];
-            }
-        }
-    </script>
 </head>
 <body>
+<?php
+$conn = new mysqli('localhost', 'root', '', 'gym_management');
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+$error = '';
+$success = '';
+$subscriber = [];
+
+if (isset($_POST['id'])) {
+    $id = $_POST['id'];
+    $stmt = $conn->prepare("SELECT * FROM subscribers WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $subscriber = $result->fetch_assoc();
+    $stmt->close();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['name'])) {
+        $name = $_POST['name'];
+        $number = $_POST['number'];
+        $age = $_POST['age'];
+        $start_date = $_POST['start_date'];
+        $months = intval($_POST['months']);
+
+        $end_date = (new DateTime($start_date))->modify("+$months months")->format('Y-m-d');
+        $active = ($end_date >= date('Y-m-d')) ? 1 : 0;
+
+        $photo = $subscriber['photo'];
+        if (isset($_POST['photo_data']) && !empty($_POST['photo_data'])) {
+            $photo_data = preg_replace('#^data:image/\w+;base64,#i', '', $_POST['photo_data']);
+            $photo = base64_decode($photo_data);
+            $finfo = finfo_open();
+            $mime_type = finfo_buffer($finfo, $photo, FILEINFO_MIME_TYPE);
+            finfo_close($finfo);
+            $allowed_types = ['image/jpeg', 'image/png'];
+            $max_size = 2 * 1024 * 1024;
+            if (!in_array($mime_type, $allowed_types) || strlen($photo) > $max_size) {
+                $error = "Invalid photo format or size. Only JPEG/PNG up to 2MB allowed.";
+            }
+        }
+
+        if (!$error) {
+            $stmt = $conn->prepare("UPDATE subscribers SET name=?, number=?, age=?, start_date=?, end_date=?, active=?, photo=? WHERE id=?");
+            $null = null;
+            $stmt->bind_param("siissibi", $name, $number, $age, $start_date, $end_date, $active, $null, $id);
+            if ($photo) {
+                $stmt->send_long_data(6, $photo);
+            }
+            if ($stmt->execute()) {
+                $success = "Subscriber updated successfully!";
+            } else {
+                $error = "Error updating subscriber: " . $conn->error;
+            }
+            $stmt->close();
+        }
+    }
+} else {
+    echo "<p>No subscriber ID provided.</p>";
+    $conn->close();
+    exit();
+}
+$conn->close();
+?>
+
 <nav>
     <ul>
         <li><a href="afficher.php">Afficher</a></li>
@@ -169,42 +158,90 @@ $conn->close();
 </nav>
 
 <h1>Renew Subscription</h1>
-<?php if ($error): ?>
-    <p class="error"><?= htmlspecialchars($error) ?></p>
-<?php endif; ?>
-<?php if ($success): ?>
-    <p class="success"><?= htmlspecialchars($success) ?></p>
-<?php endif; ?>
-<form action="update.php" method="POST" enctype="multipart/form-data">
+<?php if ($error): ?><p class="error"><?= htmlspecialchars($error) ?></p><?php endif; ?>
+<?php if ($success): ?><p class="success"><?= htmlspecialchars($success) ?></p><?php endif; ?>
+<form method="POST">
     <input type="hidden" name="id" value="<?= $subscriber['id'] ?>">
-    <label for="name">Name:</label>
-    <input type="text" name="name" value="<?= htmlspecialchars($subscriber['name']) ?>" required><br><br>
-    <label for="number">Number:</label>
-    <input type="number" name="number" value="<?= $subscriber['number'] ?>" required><br><br>
-    <label for="age">Age:</label>
-    <input type="number" name="age" value="<?= $subscriber['age'] ?>" required><br><br>
-    <label for="months">Subscription Period:</label>
+
+    <label>Name:</label>
+    <input type="text" name="name" value="<?= htmlspecialchars($subscriber['name']) ?>" required>
+
+    <label>Number:</label>
+    <input type="number" name="number" value="<?= $subscriber['number'] ?>" required>
+
+    <label>Age:</label>
+    <input type="number" name="age" value="<?= $subscriber['age'] ?>" required>
+
+    <label>Subscription Period:</label>
     <select name="months" id="months" onchange="updateEndDate()" required>
         <option value="1">1 Month</option>
         <option value="3">3 Months</option>
         <option value="6">6 Months</option>
         <option value="12">12 Months</option>
-    </select><br><br>
-    <label for="start_date">Start Date:</label>
-    <input type="date" id="start_date" name="start_date" value="<?= $subscriber['start_date'] ?>" oninput="updateEndDate()" required><br><br>
-    <label for="end_date">End Date:</label>
-    <input type="date" id="end_date" name="end_date" value="<?= $subscriber['end_date'] ?>" readonly><br><br>
-    <label for="photo">Current Photo:</label>
+    </select>
+
+    <label>Start Date:</label>
+    <input type="date" id="start_date" name="start_date" value="<?= $subscriber['start_date'] ?>" oninput="updateEndDate()" required>
+
+    <label>End Date:</label>
+    <input type="date" id="end_date" name="end_date" value="<?= $subscriber['end_date'] ?>" readonly>
+
+    <label>Current Photo:</label>
     <?php if ($subscriber['photo']): ?>
-        <img src="data:image/jpeg;base64,<?= base64_encode($subscriber['photo']) ?>" class="current-photo" alt="Current Photo"><br>
+        <img src="data:image/jpeg;base64,<?= base64_encode($subscriber['photo']) ?>" class="current-photo" alt="Current Photo">
     <?php else: ?>
         <p>No photo available</p>
     <?php endif; ?>
-    <label for="photo">Upload New Photo (JPEG/PNG, max 2MB, optional):</label>
-    <input type="file" name="photo" accept="image/jpeg,image/png"><br><br>
+
+    <label>Capture New Photo (optional):</label>
+    <video id="video" autoplay></video>
+    <canvas id="canvas" style="display: none;"></canvas>
+    <img id="captured-image" alt="Captured Image" style="display:none; max-width: 100%; border-radius: 5px; margin-bottom: 15px;">
+    <input type="hidden" name="photo_data" id="photo_data">
+    <button type="button" id="capture">Capture Photo</button>
+
     <button type="submit">Update Subscription</button>
 </form>
 
-<p><a href="afficher.php">Back to Subscribers List</a></p>
+<script>
+function updateEndDate() {
+    const startDateInput = document.getElementById('start_date').value;
+    const monthsSelect = document.getElementById('months').value;
+    if (startDateInput && monthsSelect) {
+        const startDate = new Date(startDateInput);
+        startDate.setMonth(startDate.getMonth() + parseInt(monthsSelect));
+        const endDateInput = document.getElementById('end_date');
+        endDateInput.value = startDate.toISOString().split('T')[0];
+    }
+}
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const captureButton = document.getElementById('capture');
+const capturedImage = document.getElementById('captured-image');
+const photoDataInput = document.getElementById('photo_data');
+
+navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+        video.srcObject = stream;
+    })
+    .catch(err => {
+        console.error("Camera error:", err);
+        alert("Cannot access camera. Check permissions.");
+    });
+
+captureButton.addEventListener('click', () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    capturedImage.src = imageData;
+    capturedImage.style.display = 'block';
+    video.style.display = 'none';
+    captureButton.style.display = 'none';
+    photoDataInput.value = imageData;
+});
+</script>
+
 </body>
 </html>
