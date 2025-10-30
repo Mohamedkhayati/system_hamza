@@ -74,3 +74,19 @@ INSERT INTO subscriptions (member_id, start_date, end_date, plan_name, price) VA
 INSERT INTO subscription_archive (member_id, start_date, end_date, plan_name, price, note)
 SELECT member_id, start_date, end_date, plan_name, price, 'initial import'
 FROM subscriptions;
+ALTER TABLE members
+  ADD COLUMN category ENUM('karate', 'fitness') DEFAULT 'fitness',
+  ADD COLUMN updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS subscription_archive (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  member_id INT NOT NULL,
+  start_date DATE,
+  end_date DATE,
+  plan_name VARCHAR(100),
+  price DECIMAL(10,2),
+  archived_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  note VARCHAR(255) DEFAULT NULL,
+  FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+);
+
