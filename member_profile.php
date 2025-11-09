@@ -1,73 +1,73 @@
 <?php
-require 'db.php';
+require_once 'db.php';
+if (!isset($_GET['id'])) die('ID manquant');
 
-$id = intval($_GET['id'] ?? 0);
-if ($id <= 0) { echo "<p>Membre introuvable</p>"; exit; }
+$id = intval($_GET['id']);
 
-// get member
-$stmt = $pdo->prepare("SELECT * FROM members WHERE id = ?");
-$stmt->execute([$id]);
-$m = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$m) { echo "<p>Membre introuvable</p>"; exit; }
+// Fetch member
+$id_safe = mysql_real_escape_string($id);
+$query = "SELECT * FROM members WHERE id = $id_safe";
+$res = mysql_query($query);
+if (!$res) die('Erreur SQL: ' . mysql_error());
+$m = mysql_fetch_assoc($res);
+if (!$m) die('Membre non trouvé');
 
-// current subscription (if any)
-$subStmt = $pdo->prepare("SELECT * FROM subscriptions WHERE member_id = ? AND active = 1 ORDER BY start_date DESC LIMIT 1");
-$subStmt->execute([$id]);
-$currentSub = $subStmt->fetch(PDO::FETCH_ASSOC);
+// Auto-archive after 6 months
+$created = strtotime($m['created_at']);
+$now = time();
+$months = (date('Y', $now) - date('Y', $created)) * 12 + (date('m', $now) - date('m', $created));
+if ($months > 6 && !$m['archived']) {
+    mysql_query("UPDATE members SET archived = 1 WHERE id = $id_safe");
+    $m['archived'] = 1;
+}
 
-// archive
-$archStmt = $pdo->prepare("SELECT * FROM subscription_archive WHERE member_id = ? ORDER BY archived_at DESC");
-$archStmt->execute([$id]);
-$archives = $archStmt->fetchAll(PDO::FETCH_ASSOC);
-
+// Fetch subscription history
+$history_res = mysql_query("SELECT start_date, end_date, archived_at FROM subscription_archive WHERE member_id = $id_safe ORDER BY archived_at DESC");
+if (!$history_res) die('Erreur SQL: ' . mysql_error());
 ?>
-<div class="profile">
-  <div class="profile-header">
-    <img class="avatar" src="<?= htmlspecialchars($m['photo'] ?: 'default-avatar.png') ?>" alt="photo">
-    <div class="profile-info">
-      <h3><?= htmlspecialchars($m['first_name'].' '.$m['last_name']) ?></h3>
-      <p><strong>Catégorie:</strong> <?= htmlspecialchars($m['category']) ?></p>
-      <p><strong>Téléphone:</strong> <?= htmlspecialchars($m['phone']) ?></p>
-      <p><strong>Email:</strong> <?= htmlspecialchars($m['email']) ?></p>
-    </div>
-  </div>
-
-  <section>
-    <h4>Abonnement courant</h4>
-    <?php if ($currentSub): ?>
-      <p><strong>Plan:</strong> <?= htmlspecialchars($currentSub['plan_name']) ?></p>
-      <p><strong>De:</strong> <?= htmlspecialchars($currentSub['start_date']) ?> <strong>à</strong> <?= htmlspecialchars($currentSub['end_date']) ?></p>
-      <p><strong>Prix:</strong> <?= htmlspecialchars($currentSub['price']) ?> DT</p>
-    <?php else: ?>
-      <p>Aucun abonnement actif</p>
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Profil</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<?php include 'dashboard_nav.php'; ?>
+<div class="container">
+    <a href="Afficher.php">Retour</a>
+    <h1><?php echo htmlspecialchars($m['name']); ?></h1>
+    
+    <p class="small">Âge: <?php echo !empty($m['age']) ? $m['age'] : 'Non renseigné'; ?></p>
+    <p class="small">Téléphone: <?php echo !empty($m['phone']) ? htmlspecialchars($m['phone']) : 'Non renseigné'; ?></p>
+    <p class="small">Catégorie: <?php echo htmlspecialchars($m['category']); ?></p>
+    <p class="small">Pro: <?php echo $m['professional'] ? 'Oui' : 'Non'; ?></p>
+    <p class="small">Abonnement: <?php echo $m['subscription_start'] ?: 'Non défini'; ?> → <?php echo $m['subscription_end'] ?: 'Non défini'; ?></p>
+    <p class="small">Archivé: <?php echo $m['archived'] ? 'Oui' : 'Non'; ?></p>
+    
+    <?php if (!empty($m['photo'])): ?>
+        <img src="<?php echo htmlspecialchars($m['photo']); ?>" class="preview" alt="Photo de <?php echo htmlspecialchars($m['name']); ?>">
     <?php endif; ?>
-  </section>
 
-  <section>
-    <h4>Historique des abonnements</h4>
-    <?php if (count($archives) === 0): ?>
-      <p>Pas d'historique.</p>
-    <?php else: ?>
-      <table class="archive-table">
-        <thead><tr><th>Plan</th><th>Début</th><th>Fin</th><th>Prix</th><th>Archivé le</th><th>Note</th></tr></thead>
+    <p style="margin-top:12px;">
+        <a href="update.php?id=<?php echo $m['id']; ?>"><button>Modifier</button></a>
+    </p>
+
+    <h2 style="margin-top:24px;">Historique des abonnements</h2>
+    <table class="table">
+        <thead><tr><th>Début</th><th>Fin</th><th>Archivé le</th></tr></thead>
         <tbody>
-          <?php foreach($archives as $a): ?>
+        <?php if (mysql_num_rows($history_res) === 0): ?>
+            <tr><td colspan="3" style="text-align:center;color:#777;">Aucun historique</td></tr>
+        <?php else: while ($r = mysql_fetch_assoc($history_res)): ?>
             <tr>
-              <td><?= htmlspecialchars($a['plan_name']) ?></td>
-              <td><?= htmlspecialchars($a['start_date']) ?></td>
-              <td><?= htmlspecialchars($a['end_date']) ?></td>
-              <td><?= htmlspecialchars($a['price']) ?></td>
-              <td><?= htmlspecialchars($a['archived_at']) ?></td>
-              <td><?= htmlspecialchars($a['note']) ?></td>
+                <td><?php echo $r['start_date']; ?></td>
+                <td><?php echo $r['end_date']; ?></td>
+                <td><?php echo $r['archived_at']; ?></td>
             </tr>
-          <?php endforeach; ?>
+        <?php endwhile; endif; ?>
         </tbody>
-      </table>
-    <?php endif; ?>
-  </section>
-
-  <div class="profile-actions">
-    <a class="btn" href="update.php?id=<?= $m['id'] ?>">Modifier</a>
-    <a class="btn" href="update_subscriptions.php?member_id=<?= $m['id'] ?>">Gérer abonnement</a>
-  </div>
+    </table>
 </div>
+</body>
+</html>

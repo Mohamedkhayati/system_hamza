@@ -1,94 +1,60 @@
 <?php
-session_start();
-$conn = new mysqli('localhost', 'root', '', 'gym_management');
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-// Update active status
+require_once 'db.php';
 $today = date('Y-m-d');
-$stmt = $conn->prepare("UPDATE subscribers SET active = 0 WHERE end_date < ? AND active = 1");
-$stmt->bind_param("s", $today);
-$stmt->execute();
-$stmt->close();
-// Fetch stats
-$total = $conn->query("SELECT COUNT(*) as count FROM subscribers")->fetch_assoc()['count'];
-$active = $conn->query("SELECT COUNT(*) as count FROM subscribers WHERE active = 1")->fetch_assoc()['count'];
-$non_active = $total - $active;
-$expiring = $conn->query("SELECT COUNT(*) as count FROM subscribers WHERE active = 1 AND end_date <= DATE_ADD('$today', INTERVAL 7 DAY)")->fetch_assoc()['count'];
-$conn->close();
+
+// Auto update subscription status
+mysql_query("UPDATE subscriptions SET active = 0 WHERE end_date < '$today' AND active = 1");
+mysql_query("UPDATE subscriptions s 
+            JOIN members m ON s.member_id = m.id 
+            SET s.active = 1 
+            WHERE m.subscription_start <= '$today' AND m.subscription_end >= '$today' AND s.active = 0");
+
+// Fetch counts
+$total_res = mysql_query("SELECT COUNT(*) AS cnt FROM members");
+$total_row = mysql_fetch_assoc($total_res);
+$total = $total_row['cnt'];
+
+$active_res = mysql_query("SELECT COUNT(*) AS cnt FROM subscriptions WHERE active = 1");
+$active_row = mysql_fetch_assoc($active_res);
+$active = $active_row['cnt'];
+
+$non_active_res = mysql_query("SELECT COUNT(*) AS cnt FROM members WHERE subscription_end < '$today' OR subscription_end IS NULL");
+$non_active_row = mysql_fetch_assoc($non_active_res);
+$non_active = $non_active_row['cnt'];
+
+$expiring_res = mysql_query("SELECT COUNT(*) AS cnt FROM subscriptions WHERE active = 1 AND end_date <= DATE_ADD('$today', INTERVAL 7 DAY)");
+$expiring_row = mysql_fetch_assoc($expiring_res);
+$expiring = $expiring_row['cnt'];
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Gym Management System</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; line-height: 1.6; }
-        header { background-color: #333; color: white; padding: 10px 0; position: sticky; top: 0; z-index: 100; }
-        header nav ul { list-style: none; display: flex; justify-content: center; flex-wrap: wrap; }
-        header nav ul li { margin: 0 15px; }
-        header nav ul li a { color: white; text-decoration: none; font-size: 18px; padding: 10px 15px; display: block; transition: background 0.3s; }
-        header nav ul li a:hover { background-color: #555; border-radius: 5px; }
-        main { padding: 20px; max-width: 1200px; margin: 0 auto; }
-        h1 { text-align: center; padding: 20px; color: #333; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
-        .stat-card { background: white; padding: 20px; border-radius: 10px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .stat-card h2 { margin-bottom: 10px; font-size: 1.2em; }
-        .stat-card p { font-size: 2em; font-weight: bold; }
-        .total { color: #4CAF50; }
-        .active { color: #2196F3; }
-        .non-active { color: #f44336; }
-        .expiring { color: #FF9800; }
-        .note { text-align: center; font-style: italic; margin-top: 20px; }
-        @media (max-width: 768px) {
-            header nav ul { flex-direction: column; }
-            header nav ul li { margin: 10px 0; }
-        }
-    </style>
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-    <nav>
-        <ul>
-            <li><a href="dashboard.php" aria-current="page">Dashboard</a></li>
-            <li><a href="afficher.php">Subscribers</a></li>
-            <li><a href="ajouter.php">Add New</a></li>
-            <li><a href="non_active.php">Non-Active</a></li>
-        </ul>
-    </nav>
-</header>
-<main>
-    <h1>Dashboard - Gym Management Overview</h1>
-    <div class="stats-grid">
-        <div class="stat-card">
-            <h2>Total Subscribers</h2>
-            <p class="total"><?= $total ?></p>
+<?php include 'dashboard_nav.php'; ?>
+<div class="container">
+    <h1>Tableau de bord</h1>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:20px;">
+        <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;">
+            <h3>Total</h3>
+            <p style="font-size:2em;color:#4CAF50;"><?php echo $total; ?></p>
         </div>
-        <div class="stat-card">
-            <h2>Active</h2>
-            <p class="active"><?= $active ?></p>
+        <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;">
+            <h3>Actifs</h3>
+            <p style="font-size:2em;color:#2196F3;"><?php echo $active; ?></p>
         </div>
-        <div class="stat-card">
-            <h2>Non-Active</h2>
-            <p class="non-active"><?= $non_active ?></p>
+        <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;">
+            <h3>Inactifs</h3>
+            <p style="font-size:2em;color:#f44336;"><?php echo $non_active; ?></p>
         </div>
-        <div class="stat-card">
-            <h2>Expiring Soon (7 Days)</h2>
-            <p class="expiring"><?= $expiring ?></p>
+        <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;">
+            <h3>Expire (7j)</h3>
+            <p style="font-size:2em;color:#FF9800;"><?php echo $expiring; ?></p>
         </div>
     </div>
-    <p class="note">System updated automatically. Last check: <?= date('Y-m-d H:i') ?>.</p>
-</main>
-<script>
-function updateActiveStatus() {
-    fetch('update_active.php', { method: 'POST' })
-        .then(response => response.text())
-        .then(data => console.log('Active status updated:', data))
-        .catch(err => console.error('Update error:', err));
-}
-window.onload = updateActiveStatus;
-</script>
+</div>
 </body>
 </html>

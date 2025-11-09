@@ -1,15 +1,24 @@
 <?php
-// db.php - central DB connection
-$DB_HOST = '127.0.0.1';
-$DB_NAME = 'gym_management';
-$DB_USER = 'root';
-$DB_PASS = ''; // change as needed
+// Database connection (old MySQL extension for PHP 5.4)
+$host = 'localhost';
+$user = 'root';
+$pass = '';
+$dbname = 'gym_management';
 
-try {
-    $pdo = new PDO("mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4", $DB_USER, $DB_PASS, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    ]);
-} catch (PDOException $e) {
-    die("DB connection failed: " . $e->getMessage());
+// Connect to MySQL server
+$link = mysql_connect($host, $user, $pass);
+if (!$link) {
+    die('DB connection failed: ' . mysql_error());
 }
+
+// Select the database
+$db_selected = mysql_select_db($dbname, $link);
+if (!$db_selected) {
+    die('Cannot select database: ' . mysql_error());
+}
+
+// Set character encoding
+mysql_query("SET NAMES 'utf8'");
+
+// Done — $link is your active connection
 ?>

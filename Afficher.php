@@ -1,96 +1,139 @@
 <?php
-require 'db.php';
+require_once 'db.php';
 
-$filter = $_GET['category'] ?? 'all';
-
-// fetch members
-if ($filter !== 'all' && in_array($filter, ['karate','fitness'])) {
-    $stmt = $pdo->prepare("SELECT * FROM members WHERE category = ? ORDER BY last_name, first_name");
-    $stmt->execute([$filter]);
-} else {
-    $stmt = $pdo->query("SELECT * FROM members ORDER BY last_name, first_name");
+$message = '';
+$search = '';
+if (isset($_GET['search'])) {
+    $search = trim($_GET['search']);
 }
-$members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Delete member
+if (isset($_GET['delete'])) {
+    $id = (int)$_GET['delete'];
+    $delete_sql = sprintf("DELETE FROM members WHERE id = %d", $id);
+    $delete_res = mysql_query($delete_sql);
+    if ($delete_res) {
+        $message = "Membre supprimé avec succès.";
+    } else {
+        $message = "Erreur lors de la suppression : " . mysql_error();
+    }
+}
+
+// Prepare base SQL
+$today = date('Y-m-d');
+$sql = "SELECT m.id, m.name, m.age, m.phone, m.category, m.professional, 
+               m.subscription_start, m.subscription_end, m.archived, s.active 
+        FROM members m 
+        LEFT JOIN subscriptions s ON m.id = s.member_id 
+        WHERE 1=1";
+
+// Add search filter
+if ($search !== '') {
+    $like = mysql_real_escape_string('%' . $search . '%');
+    $sql .= " AND (m.name LIKE '$like' 
+              OR m.phone LIKE '$like' 
+              OR m.age LIKE '$like' 
+              OR m.category LIKE '$like')";
+}
+
+$sql .= " ORDER BY m.created_at DESC";
+$res = mysql_query($sql);
+if (!$res) {
+    die('Erreur SQL : ' . mysql_error());
+}
 ?>
 <!doctype html>
-<html>
+<html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <title>Liste des membres</title>
-  <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8">
+    <title>Membres</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <?php include 'dashboard_nav.php'; ?>
-<main class="container">
-  <h2>Membres</h2>
+<div class="container">
+    <h2>Liste des membres</h2>
 
-  <div class="controls">
-    <a href="Ajouter.php" class="btn">+ Nouveau membre</a>
+    <?php if ($message != ''): ?>
+        <div class="success-msg"><?php echo $message; ?></div>
+    <?php endif; ?>
 
-    <label>Filtre catégorie:
-    <select id="categoryFilter">
-      <option value="all" <?= $filter==='all' ? 'selected' : '' ?>>Tous</option>
-      <option value="fitness" <?= $filter==='fitness' ? 'selected' : '' ?>>Fitness</option>
-      <option value="karate" <?= $filter==='karate' ? 'selected' : '' ?>>Karate</option>
-    </select>
-    </label>
-  </div>
+    <form method="get" class="controls">
+        <input type="text" name="search" class="search-box" 
+               placeholder="Rechercher par nom, téléphone, âge, catégorie..." 
+               value="<?php echo htmlspecialchars($search); ?>">
+        <button type="submit">Rechercher</button>
+        <?php if ($search != ''): ?>
+            <a href="Afficher.php"><button type="button" class="secondary">Effacer</button></a>
+        <?php endif; ?>
+    </form>
 
-  <table class="members-table">
-    <thead>
-      <tr><th>Nom</th><th>Téléphone</th><th>Email</th><th>Catégorie</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      <?php foreach($members as $m): ?>
-      <tr class="member-row" data-id="<?= htmlspecialchars($m['id']) ?>">
-        <td><?= htmlspecialchars($m['last_name'] . ' ' . $m['first_name']) ?></td>
-        <td><?= htmlspecialchars($m['phone']) ?></td>
-        <td><?= htmlspecialchars($m['email']) ?></td>
-        <td><?= htmlspecialchars($m['category']) ?></td>
-        <td>
-          <a href="update.php?id=<?= $m['id'] ?>" class="btn small">Edit</a>
-          <a href="delete.php?id=<?= $m['id'] ?>" class="btn small danger" onclick="return confirm('Supprimer ?')">Delete</a>
-        </td>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
-</main>
+    <div class="controls">
+        <a href="Ajouter.php"><button>Ajouter</button></a>
+        <button id="toggleArchived" class="secondary">Archivés</button>
+    </div>
 
-<!-- Profile modal -->
-<div id="profileModal" class="modal" aria-hidden="true">
-  <div class="modal-content" role="dialog" aria-modal="true">
-    <button id="closeModal" class="modal-close">×</button>
-    <div id="profileBody"></div>
-  </div>
+    <table class="table" id="membersTable">
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Âge</th>
+                <th>Tél</th>
+                <th>Cat</th>
+                <th>Début</th>
+                <th>Fin</th>
+                <th>Statut</th>
+                <th>Pro</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php while ($r = mysql_fetch_assoc($res)): 
+            $status = 'Inactif';
+            if ($r['subscription_start'] && $r['subscription_end'] && 
+                $today >= $r['subscription_start'] && $today <= $r['subscription_end']) {
+                $status = 'Actif';
+            }
+            $statusClass = ($status == 'Actif') ? 'status-active' : 'status-inactive';
+        ?>
+            <tr data-id="<?php echo $r['id']; ?>" class="<?php echo ($r['archived'] ? 'tr-archived' : ''); ?>">
+                <td><?php echo htmlspecialchars($r['name']); ?></td>
+                <td><?php echo ($r['age'] ? $r['age'] : '-'); ?></td>
+                <td><?php echo ($r['phone'] ? $r['phone'] : '-'); ?></td>
+                <td><?php echo $r['category']; ?></td>
+                <td><?php echo ($r['subscription_start'] ? $r['subscription_start'] : '-'); ?></td>
+                <td><?php echo ($r['subscription_end'] ? $r['subscription_end'] : '-'); ?></td>
+                <td class="<?php echo $statusClass; ?>"><?php echo $status; ?></td>
+                <td><?php echo ($r['professional'] ? 'Oui' : 'Non'); ?></td>
+                <td>
+                    <a href="member_profile.php?id=<?php echo $r['id']; ?>"><button class="secondary">Voir</button></a>
+                    <a href="update.php?id=<?php echo $r['id']; ?>"><button class="secondary">Modif</button></a>
+                    <a href="Afficher.php?delete=<?php echo $r['id']; ?>&search=<?php echo urlencode($search); ?>" onclick="return confirm('Supprimer ?')">
+                        <button class="danger">Suppr</button>
+                    </a>
+                </td>
+            </tr>
+        <?php endwhile; ?>
+        </tbody>
+    </table>
 </div>
 
 <script>
-document.getElementById('categoryFilter').addEventListener('change', function() {
-  const v = this.value;
-  const url = new URL(window.location.href);
-  url.searchParams.set('category', v);
-  window.location.href = url.toString();
-});
-
-// double-click to show profile
-document.querySelectorAll('.member-row').forEach(row => {
-  row.addEventListener('dblclick', function() {
-    const id = this.dataset.id;
-    fetch('member_profile.php?id=' + encodeURIComponent(id))
-      .then(r => r.text())
-      .then(html => {
-        document.getElementById('profileBody').innerHTML = html;
-        document.getElementById('profileModal').style.display = 'block';
-        document.getElementById('profileModal').setAttribute('aria-hidden','false');
-      });
-  });
-});
-
-document.getElementById('closeModal').addEventListener('click', function(){
-  document.getElementById('profileModal').style.display = 'none';
-  document.getElementById('profileModal').setAttribute('aria-hidden','true');
-});
+var rows = document.querySelectorAll('#membersTable tbody tr');
+for (var i = 0; i < rows.length; i++) {
+    rows[i].ondblclick = function() {
+        location.href = 'member_profile.php?id=' + this.getAttribute('data-id');
+    };
+}
+var show = false;
+document.getElementById('toggleArchived').onclick = function() {
+    show = !show;
+    var archived = document.querySelectorAll('.tr-archived');
+    for (var i = 0; i < archived.length; i++) {
+        archived[i].style.display = show ? '' : 'none';
+    }
+    this.textContent = show ? 'Masquer' : 'Archivés';
+};
 </script>
 </body>
 </html>
