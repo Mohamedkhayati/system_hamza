@@ -19,21 +19,19 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// Prepare base SQL
 $today = date('Y-m-d');
-$sql = "SELECT m.id, m.name, m.age, m.phone, m.category, m.professional, 
-               m.subscription_start, m.subscription_end, m.archived, s.active 
-        FROM members m 
-        LEFT JOIN subscriptions s ON m.id = s.member_id 
-        WHERE 1=1";
 
-// Add search filter
+// Prepare base SQL
+$sql = "
+    SELECT m.id, m.name, m.age, m.phone, m.category, m.professional,
+           m.subscription_start, m.subscription_end, m.archived, m.active
+    FROM members m
+    WHERE 1=1
+";
+
 if ($search !== '') {
     $like = mysql_real_escape_string('%' . $search . '%');
-    $sql .= " AND (m.name LIKE '$like' 
-              OR m.phone LIKE '$like' 
-              OR m.age LIKE '$like' 
-              OR m.category LIKE '$like')";
+    $sql .= " AND (m.name LIKE '$like' OR m.phone LIKE '$like' OR m.age LIKE '$like' OR m.category LIKE '$like')";
 }
 
 $sql .= " ORDER BY m.created_at DESC";
@@ -59,8 +57,8 @@ if (!$res) {
     <?php endif; ?>
 
     <form method="get" class="controls">
-        <input type="text" name="search" class="search-box" 
-               placeholder="Rechercher par nom, téléphone, âge, catégorie..." 
+        <input type="text" name="search" class="search-box"
+               placeholder="Rechercher par nom, téléphone, âge, catégorie..."
                value="<?php echo htmlspecialchars($search); ?>">
         <button type="submit">Rechercher</button>
         <?php if ($search != ''): ?>
@@ -88,19 +86,15 @@ if (!$res) {
             </tr>
         </thead>
         <tbody>
-        <?php while ($r = mysql_fetch_assoc($res)): 
-            $status = 'Inactif';
-            if ($r['subscription_start'] && $r['subscription_end'] && 
-                $today >= $r['subscription_start'] && $today <= $r['subscription_end']) {
-                $status = 'Actif';
-            }
+        <?php while ($r = mysql_fetch_assoc($res)):
+            $status = ($r['active'] == 1) ? 'Actif' : 'Inactif';
             $statusClass = ($status == 'Actif') ? 'status-active' : 'status-inactive';
         ?>
             <tr data-id="<?php echo $r['id']; ?>" class="<?php echo ($r['archived'] ? 'tr-archived' : ''); ?>">
                 <td><?php echo htmlspecialchars($r['name']); ?></td>
                 <td><?php echo ($r['age'] ? $r['age'] : '-'); ?></td>
                 <td><?php echo ($r['phone'] ? $r['phone'] : '-'); ?></td>
-                <td><?php echo $r['category']; ?></td>
+                <td><?php echo htmlspecialchars($r['category']); ?></td>
                 <td><?php echo ($r['subscription_start'] ? $r['subscription_start'] : '-'); ?></td>
                 <td><?php echo ($r['subscription_end'] ? $r['subscription_end'] : '-'); ?></td>
                 <td class="<?php echo $statusClass; ?>"><?php echo $status; ?></td>
