@@ -186,3 +186,13 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+-- Add members.active if missing
+ALTER TABLE members
+  ADD COLUMN IF NOT EXISTS `active` TINYINT(1) NOT NULL DEFAULT 0;
+
+-- Ensure subscriptions has active column (0/1)
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS `active` TINYINT(1) NOT NULL DEFAULT 0;
+
+-- Optional: ensure subscriptions start_date/end_date columns exist and types are DATE
+-- (adjust names if your schema differs)
