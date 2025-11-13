@@ -3,16 +3,16 @@ require_once 'db.php';
 if (!isset($_GET['id'])) die('ID manquant');
 
 $id = intval($_GET['id']);
+$id_safe = mysql_real_escape_string($id);
 
 // Fetch member
-$id_safe = mysql_real_escape_string($id);
 $query = "SELECT * FROM members WHERE id = $id_safe";
 $res = mysql_query($query);
 if (!$res) die('Erreur SQL: ' . mysql_error());
 $m = mysql_fetch_assoc($res);
 if (!$m) die('Membre non trouvé');
 
-// Auto-archive after 6 months
+// Auto-archive after 6 months since created_at
 $created = strtotime($m['created_at']);
 $now = time();
 $months = (date('Y', $now) - date('Y', $created)) * 12 + (date('m', $now) - date('m', $created));
@@ -37,14 +37,15 @@ if (!$history_res) die('Erreur SQL: ' . mysql_error());
 <div class="container">
     <a href="Afficher.php">Retour</a>
     <h1><?php echo htmlspecialchars($m['name']); ?></h1>
-    
+
     <p class="small">Âge: <?php echo !empty($m['age']) ? $m['age'] : 'Non renseigné'; ?></p>
     <p class="small">Téléphone: <?php echo !empty($m['phone']) ? htmlspecialchars($m['phone']) : 'Non renseigné'; ?></p>
     <p class="small">Catégorie: <?php echo htmlspecialchars($m['category']); ?></p>
     <p class="small">Pro: <?php echo $m['professional'] ? 'Oui' : 'Non'; ?></p>
     <p class="small">Abonnement: <?php echo $m['subscription_start'] ?: 'Non défini'; ?> → <?php echo $m['subscription_end'] ?: 'Non défini'; ?></p>
+    <p class="small">Actif: <?php echo $m['active'] ? 'Oui' : 'Non'; ?></p>
     <p class="small">Archivé: <?php echo $m['archived'] ? 'Oui' : 'Non'; ?></p>
-    
+
     <?php if (!empty($m['photo'])): ?>
         <img src="<?php echo htmlspecialchars($m['photo']); ?>" class="preview" alt="Photo de <?php echo htmlspecialchars($m['name']); ?>">
     <?php endif; ?>
