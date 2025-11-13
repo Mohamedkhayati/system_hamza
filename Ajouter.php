@@ -6,37 +6,40 @@ $errors = array();
 $today = date('Y-m-d');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    // Retrieve form fields (old PHP syntax)
     $name = isset($_POST['name']) ? trim($_POST['name']) : '';
     $age = isset($_POST['age']) ? (int)$_POST['age'] : 0;
     $phone = isset($_POST['phone']) ? trim($_POST['phone']) : '';
-    $category = isset($_POST['category']) ? $_POST['category'] : 'general';
+    $category = isset($_POST['category']) ? mysql_real_escape_string($_POST['category']) : 'general';
     $professional = isset($_POST['professional']) ? 1 : 0;
-    $start = isset($_POST['subscription_start']) ? $_POST['subscription_start'] : null;
+    $start = !empty($_POST['subscription_start']) ? $_POST['subscription_start'] : null;
     $period = isset($_POST['period']) ? (int)$_POST['period'] : 0;
 
     if ($name === '') {
         $errors[] = 'Nom requis.';
     }
 
-    // Calculate subscription end date
+    // Calculate subscription end date (simple strtotime add months)
     $end = null;
     if (!empty($start) && $period > 0) {
-        $end = date('Y-m-d', strtotime($start . " +$period months"));
+        // Add months safely handling months overflow
+        $d = date_create($start);
+        if ($d) {
+            date_add($d, date_interval_create_from_date_string($period . ' months'));
+            $end = date_format($d, 'Y-m-d');
+        } else {
+            $errors[] = 'Date de début invalide.';
+        }
     }
 
-    // File upload (for photo)
-    $savedPath = null;
+    // File upload
+    $savedPath = '';
     if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] == UPLOAD_ERR_OK) {
         $file = $_FILES['photo'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         $allowed = array('jpg','jpeg','png','gif','webp');
         if (in_array($ext, $allowed)) {
             $dir = dirname(__FILE__) . '/uploads/';
-            if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
             $new = uniqid('mbr_') . '.' . $ext;
             if (move_uploaded_file($file['tmp_name'], $dir . $new)) {
                 $savedPath = 'uploads/' . $new;
@@ -44,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Optional: base64 image capture
+    // base64 camera data
     if (!$savedPath && !empty($_POST['photo_data'])) {
         $data = $_POST['photo_data'];
         if (preg_match('#^data:image/(\w+);base64,#', $data, $m)) {
@@ -62,29 +65,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Insert into DB
     if (empty($errors)) {
-        $name = mysql_real_escape_string($name);
-        $phone = mysql_real_escape_string($phone);
-        $category = mysql_real_escape_string($category);
-        $photo = $savedPath ? mysql_real_escape_string($savedPath) : '';
+        $name_sql = mysql_real_escape_string($name);
+        $phone_sql = mysql_real_escape_string($phone);
+        $photo_sql = $savedPath ? mysql_real_escape_string($savedPath) : '';
+
         $start_sql = $start ? "'" . mysql_real_escape_string($start) . "'" : "NULL";
         $end_sql = $end ? "'" . mysql_real_escape_string($end) . "'" : "NULL";
 
-        $sql = "INSERT INTO members (name, age, phone, category, professional, photo, subscription_start, subscription_end, created_at)
-                VALUES ('$name', $age, '$phone', '$category', $professional, '$photo', $start_sql, $end_sql, NOW())";
+        $sql = "INSERT INTO members (name, age, phone, category, professional, photo, subscription_start, subscription_end, active, created_at)
+                VALUES ('$name_sql', $age, '$phone_sql', '$category', $professional, '$photo_sql', $start_sql, $end_sql, 0, NOW())";
 
         $res = mysql_query($sql);
         if ($res) {
             $member_id = mysql_insert_id();
 
-            // Insert into subscriptions
+            // Insert into subscriptions if defined
             if (!empty($start) && !empty($end)) {
                 $active = ($today >= $start && $today <= $end) ? 1 : 0;
                 $plan = mysql_real_escape_string($period . ' mois');
                 $ins = "INSERT INTO subscriptions (member_id, start_date, end_date, plan_name, active)
                         VALUES ($member_id, '$start', '$end', '$plan', $active)";
                 mysql_query($ins);
+
+                // Update members.active based on subscription just inserted
+                if ($active) {
+                    mysql_query("UPDATE members SET active = 1 WHERE id = $member_id");
+                }
             }
 
             $message = 'Ajouté.';
@@ -156,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="controls">
             <label class="small">Photo:
-                <input type="file" name="photo" accept="image/*">
+                <input type="file" name="photo" accept="image/*" id="fileInput">
             </label>
             <button type="button" id="openCamera" class="secondary">Caméra</button>
         </div>
@@ -171,10 +178,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 </div>
 
-<!-- CAMERA MODAL + SCRIPT -->
-<div id="cameraModal" class="modal hidden"> ... </div>
+<!-- CAMERA MODAL (simple inline modal) -->
+<div id="cameraModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.8);align-items:center;justify-content:center;">
+    <div style="background:#fff;padding:10px;max-width:640px;margin:auto;">
+        <video id="camVideo" autoplay playsinline style="width:100%;max-height:480px"></video>
+        <div style="margin-top:8px">
+            <button id="captureBtn">Capturer</button>
+            <button id="closeCam">Fermer</button>
+        </div>
+        <canvas id="camCanvas" style="display:none"></canvas>
+    </div>
+</div>
 
 <script>
+// end date calculation
 function updateEndDate() {
     var start = document.getElementById('start_date').value;
     var period = parseInt(document.getElementById('period').value);
@@ -182,13 +199,79 @@ function updateEndDate() {
     if (start && period > 0) {
         var d = new Date(start);
         d.setMonth(d.getMonth() + period);
-        endInput.value = d.toISOString().split('T')[0];
+        // correct for month overflow
+        var yyyy = d.getFullYear();
+        var mm = ('0' + (d.getMonth() + 1)).slice(-2);
+        var dd = ('0' + d.getDate()).slice(-2);
+        endInput.value = yyyy + '-' + mm + '-' + dd;
     } else {
         endInput.value = '';
     }
 }
 document.getElementById('start_date').onchange = updateEndDate;
 document.getElementById('period').onchange = updateEndDate;
+
+// Camera logic (getUserMedia)
+var openBtn = document.getElementById('openCamera');
+var modal = document.getElementById('cameraModal');
+var video = document.getElementById('camVideo');
+var canvas = document.getElementById('camCanvas');
+var captureBtn = document.getElementById('captureBtn');
+var closeCam = document.getElementById('closeCam');
+var photoDataInput = document.getElementById('photo_data');
+var previewImg = document.getElementById('previewImg');
+
+openBtn.onclick = function(){
+    // show modal
+    modal.style.display = 'flex';
+    // ask for camera
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+            video.srcObject = stream;
+            video.play();
+        }).catch(function(err){
+            alert('Impossible d\'accéder à la caméra: ' + err.message);
+            modal.style.display = 'none';
+        });
+    } else {
+        alert('Caméra non supportée par ce navigateur.');
+        modal.style.display = 'none';
+    }
+};
+
+captureBtn.onclick = function(){
+    var w = video.videoWidth;
+    var h = video.videoHeight;
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, w, h);
+    var dataURL = canvas.toDataURL('image/jpeg');
+    photoDataInput.value = dataURL;
+    previewImg.src = dataURL;
+    previewImg.className = 'preview';
+    // stop the stream
+    try {
+        var stream = video.srcObject;
+        if (stream) {
+            var tracks = stream.getTracks();
+            for (var i=0;i<tracks.length;i++) tracks[i].stop();
+        }
+    } catch (e) {}
+    modal.style.display = 'none';
+};
+
+closeCam.onclick = function(){
+    // stop stream and hide
+    try {
+        var stream = video.srcObject;
+        if (stream) {
+            var tracks = stream.getTracks();
+            for (var i=0;i<tracks.length;i++) tracks[i].stop();
+        }
+    } catch (e) {}
+    modal.style.display = 'none';
+};
 </script>
 </body>
 </html>
