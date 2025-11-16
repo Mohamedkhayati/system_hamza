@@ -1,5 +1,6 @@
 <?php
 require_once 'db.php';
+date_default_timezone_set('Africa/Tunis');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     die('Méthode non autorisée');

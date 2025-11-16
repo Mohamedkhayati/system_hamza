@@ -1,5 +1,6 @@
 <?php
 require 'db.php';
+date_default_timezone_set('Africa/Tunis');
 
 $member_id = isset($_GET['member_id']) ? intval($_GET['member_id']) : (isset($_POST['member_id']) ? intval($_POST['member_id']) : 0);
 if ($member_id <= 0) { header('Location: Afficher.php'); exit; }

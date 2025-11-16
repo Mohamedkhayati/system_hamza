@@ -1,5 +1,6 @@
 <?php
 require_once 'db.php'; // This should contain your mysql_connect() code
+date_default_timezone_set('Africa/Tunis');
 
 // Unarchive member
 if (isset($_GET['unarchive'])) {

@@ -1,6 +1,7 @@
 <?php
 require_once 'db.php';
 if (!isset($_GET['id'])) die('ID manquant');
+date_default_timezone_set('Africa/Tunis');
 
 $id = intval($_GET['id']);
 $id_safe = mysql_real_escape_string($id);
@@ -21,8 +22,8 @@ if ($months > 6 && !$m['archived']) {
     $m['archived'] = 1;
 }
 
-// Fetch subscription history
-$history_res = mysql_query("SELECT start_date, end_date, archived_at FROM subscription_archive WHERE member_id = $id_safe ORDER BY archived_at DESC");
+// Fetch subscription history from archive
+$history_res = mysql_query("SELECT start_date, end_date, archived_at, note FROM subscription_archive WHERE member_id = $id_safe ORDER BY archived_at DESC");
 if (!$history_res) die('Erreur SQL: ' . mysql_error());
 ?>
 <!doctype html>
@@ -54,17 +55,26 @@ if (!$history_res) die('Erreur SQL: ' . mysql_error());
         <a href="update.php?id=<?php echo $m['id']; ?>"><button>Modifier</button></a>
     </p>
 
+    <!-- PAYE button here too (visible only if inactive) -->
+    <?php if ($m['active'] == 0): ?>
+        <form method="post" action="payer.php" onsubmit="return confirm('Confirmer paiement et ajouter 1 mois ?');">
+            <input type="hidden" name="id" value="<?php echo $m['id']; ?>">
+            <button type="submit">Paye</button>
+        </form>
+    <?php endif; ?>
+
     <h2 style="margin-top:24px;">Historique des abonnements</h2>
     <table class="table">
-        <thead><tr><th>Début</th><th>Fin</th><th>Archivé le</th></tr></thead>
+        <thead><tr><th>Début</th><th>Fin</th><th>Archivé le</th><th>Note</th></tr></thead>
         <tbody>
         <?php if (mysql_num_rows($history_res) === 0): ?>
-            <tr><td colspan="3" style="text-align:center;color:#777;">Aucun historique</td></tr>
+            <tr><td colspan="4" style="text-align:center;color:#777;">Aucun historique</td></tr>
         <?php else: while ($r = mysql_fetch_assoc($history_res)): ?>
             <tr>
                 <td><?php echo $r['start_date']; ?></td>
                 <td><?php echo $r['end_date']; ?></td>
                 <td><?php echo $r['archived_at']; ?></td>
+                <td><?php echo htmlspecialchars($r['note']); ?></td>
             </tr>
         <?php endwhile; endif; ?>
         </tbody>

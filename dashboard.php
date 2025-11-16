@@ -1,6 +1,7 @@
 <?php
 require_once 'db.php';
 $today = date('Y-m-d');
+date_default_timezone_set('Africa/Tunis');
 
 // Auto update subscription status
 mysql_query("UPDATE subscriptions SET active = 0 WHERE end_date < '$today' AND active = 1");

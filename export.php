@@ -1,5 +1,7 @@
 <?php
 // Connect to DB
+date_default_timezone_set('Africa/Tunis');
+
 $conn = mysql_connect('localhost', 'root', '');
 if (!$conn) {
     die('Connection failed: ' . mysql_error());

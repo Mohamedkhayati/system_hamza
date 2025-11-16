@@ -1,5 +1,6 @@
 <?php
 require_once 'db.php';
+date_default_timezone_set('Africa/Tunis');
 
 $message = '';
 $search = '';
@@ -46,6 +47,14 @@ if (!$res) {
     <meta charset="utf-8">
     <title>Membres</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .tr-archived { opacity: 0.6; }
+        .status-active { color: green; font-weight:bold; }
+        .status-inactive { color: #999; }
+        form.inline { display:inline; margin:0; padding:0; }
+        button.paye { background:#2d9cdb; color:#fff; border:none; padding:6px 8px; cursor:pointer; }
+        button.paye[style*="display:none"] { visibility:hidden; }
+    </style>
 </head>
 <body>
 <?php include 'dashboard_nav.php'; ?>
@@ -102,9 +111,19 @@ if (!$res) {
                 <td>
                     <a href="member_profile.php?id=<?php echo $r['id']; ?>"><button class="secondary">Voir</button></a>
                     <a href="update.php?id=<?php echo $r['id']; ?>"><button class="secondary">Modif</button></a>
+
+                    <!-- Delete -->
                     <a href="Afficher.php?delete=<?php echo $r['id']; ?>&search=<?php echo urlencode($search); ?>" onclick="return confirm('Supprimer ?')">
                         <button class="danger">Suppr</button>
                     </a>
+
+                    <!-- PAYE form: visible only if member is INACTIVE -->
+                    <form class="inline" method="post" action="payer.php" onsubmit="return confirm('Confirmer paiement et ajouter 1 mois ?');">
+                        <input type="hidden" name="id" value="<?php echo $r['id']; ?>">
+                        <!-- hide visually if already active -->
+                        <?php $style = ($r['active'] == 1) ? 'style="display:none"' : ''; ?>
+                        <button class="paye" type="submit" <?php echo $style; ?>>Paye</button>
+                    </form>
                 </td>
             </tr>
         <?php endwhile; ?>

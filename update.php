@@ -1,17 +1,16 @@
 <?php
+date_default_timezone_set('Africa/Tunis');
 require_once 'db.php';
+
 if (!isset($_GET['id'])) die('ID manquant');
-
 $id = (int)$_GET['id'];
-
 $id_safe = mysql_real_escape_string($id);
-$q = "SELECT * FROM members WHERE id = $id_safe LIMIT 1";
-$r = mysql_query($q);
+
+$r = mysql_query("SELECT * FROM members WHERE id = $id_safe LIMIT 1");
 if (!$r || mysql_num_rows($r) == 0) die('Membre introuvable');
 $member = mysql_fetch_assoc($r);
 
 $errors = array();
-$message = '';
 $today = date('Y-m-d');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -21,13 +20,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category = isset($_POST['category']) ? mysql_real_escape_string($_POST['category']) : 'general';
     $professional = isset($_POST['professional']) ? 1 : 0;
     $start = !empty($_POST['subscription_start']) ? $_POST['subscription_start'] : null;
+    $end_manual = !empty($_POST['subscription_end']) ? $_POST['subscription_end'] : null;
     $period = isset($_POST['period']) ? (int)$_POST['period'] : 0;
 
     if ($name === '') $errors[] = 'Le nom est requis.';
 
-    // compute end
-    $end = null;
-    if ($start && $period > 0) {
+    // compute end date only if not manually set
+    $end = $end_manual;
+    if (!$end && $start && $period > 0) {
         $d = date_create($start);
         if ($d) {
             date_add($d, date_interval_create_from_date_string($period . ' months'));
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // photo handling (file or base64)
+    // photo handling
     $savedPath = $member['photo'];
     if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] == UPLOAD_ERR_OK) {
         $file = $_FILES['photo'];
@@ -75,38 +75,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $upd = "
             UPDATE members
-            SET name = '$name_sql',
-                age = $age,
-                phone = '$phone_sql',
-                category = '$category',
-                professional = $professional,
-                photo = '$photo_sql',
-                subscription_start = " . ($start ? "'" . mysql_real_escape_string($start) . "'" : "NULL") . ",
-                subscription_end = " . ($end ? "'" . mysql_real_escape_string($end) . "'" : "NULL") . "
-            WHERE id = $id_safe
+            SET name='$name_sql',
+                age=$age,
+                phone='$phone_sql',
+                category='$category',
+                professional=$professional,
+                photo='$photo_sql',
+                subscription_start=" . ($start ? "'".mysql_real_escape_string($start)."'" : "NULL") . ",
+                subscription_end=" . ($end ? "'".mysql_real_escape_string($end)."'" : "NULL") . "
+            WHERE id=$id_safe
         ";
         $res = mysql_query($upd);
-        if (!$res) {
-            $errors[] = 'Erreur DB: ' . mysql_error();
-        } else {
-            // update or insert subscription record
+        if (!$res) $errors[] = 'Erreur DB: ' . mysql_error();
+        else {
             if ($start && $end) {
                 $active = ($today >= $start && $today <= $end) ? 1 : 0;
-                $plan = mysql_real_escape_string($period . ' mois');
-                // check existing subscription for this member (any)
-                $check = mysql_query("SELECT id FROM subscriptions WHERE member_id = $id_safe LIMIT 1");
+                mysql_query("UPDATE members SET active=$active WHERE id=$id_safe");
+                
+                // update subscriptions table
+                $check = mysql_query("SELECT id FROM subscriptions WHERE member_id=$id_safe LIMIT 1");
+                $plan = mysql_real_escape_string($period.' mois');
                 if ($check && mysql_num_rows($check) > 0) {
-                    // update all subscriptions? better update the latest active/most recent subscription
-                    // For simplicity update all subscriptions for member to new dates if you want to replace
-                    mysql_query("UPDATE subscriptions SET start_date = '$start', end_date = '$end', plan_name = '$plan', active = $active WHERE member_id = $id_safe");
+                    mysql_query("UPDATE subscriptions SET start_date='$start', end_date='$end', plan_name='$plan', active=$active WHERE member_id=$id_safe");
                 } else {
                     mysql_query("INSERT INTO subscriptions (member_id, start_date, end_date, plan_name, active) VALUES ($id_safe, '$start', '$end', '$plan', $active)");
                 }
-
-                // set member active flag
-                mysql_query("UPDATE members SET active = $active WHERE id = $id_safe");
             }
-
             header("Location: member_profile.php?id=$id_safe");
             exit;
         }
@@ -135,27 +129,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <option value="general" <?php echo $member['category']==='general'?'selected':'' ?>>General</option>
             <option value="karate" <?php echo $member['category']==='karate'?'selected':'' ?>>Karate</option>
             <option value="fitness" <?php echo $member['category']==='fitness'?'selected':'' ?>>Fitness</option>
+		<option value="zumba" <?php echo $member['category']==='zumba'?'selected':'' ?>>Zumba</option>
         </select>
     </label>
     <label><input type="checkbox" name="professional" <?php echo $member['professional'] ? 'checked' : ''; ?>> Pro</label>
 
-    <label>Date début <input type="date" name="subscription_start" id="start_date" value="<?php echo $member['subscription_start']; ?>"></label>
+    <label>Date début <input type="date" name="subscription_start" value="<?php echo $member['subscription_start']; ?>"></label>
     <label>Période
-        <select name="period" id="period">
+        <select name="period">
             <option value="0">Aucune</option>
             <option value="1">1 mois</option>
             <option value="3">3 mois</option>
             <option value="12">12 mois</option>
         </select>
     </label>
-    <label>Date fin <input type="date" name="subscription_end" id="end_date" readonly value="<?php echo $member['subscription_end']; ?>"></label>
+    <label>Date fin <input type="date" name="subscription_end" value="<?php echo $member['subscription_end']; ?>"></label>
 
     <div class="controls">
         <label class="small">Photo: <input type="file" name="photo" accept="image/*"></label>
         <button type="button" id="openCamera" class="secondary">Caméra</button>
     </div>
-    <input type="hidden" name="photo_data" id="photo_data">
-    <?php if ($member['photo']): ?><img src="<?php echo htmlspecialchars($member['photo']); ?>" class="preview"><?php endif; ?>
 
     <div style="margin-top:12px;">
         <button type="submit">Enregistrer</button>
@@ -163,28 +156,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </form>
 </div>
-
-<script>
-// update end date logic (same as add)
-function updateEndDate() {
-    var start = document.getElementById('start_date').value;
-    var period = parseInt(document.getElementById('period').value);
-    var endInput = document.getElementById('end_date');
-    if (start && period > 0) {
-        var d = new Date(start);
-        d.setMonth(d.getMonth() + period);
-        var yyyy = d.getFullYear();
-        var mm = ('0' + (d.getMonth() + 1)).slice(-2);
-        var dd = ('0' + d.getDate()).slice(-2);
-        endInput.value = yyyy + '-' + mm + '-' + dd;
-    } else {
-        endInput.value = '';
-    }
-}
-document.getElementById('start_date').onchange = updateEndDate;
-document.getElementById('period').onchange = updateEndDate;
-
-// Reuse camera logic from Ajouter.php if desired (copy/paste)
-</script>
 </body>
 </html>

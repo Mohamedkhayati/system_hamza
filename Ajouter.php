@@ -1,5 +1,6 @@
 <?php
 require_once 'db.php';
+date_default_timezone_set('Africa/Tunis');
 
 $message = '';
 $errors = array();
@@ -168,6 +169,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <option value="general">General</option>
                 <option value="karate">Karate</option>
                 <option value="fitness">Fitness</option>
+                <option value="zumba">Zumba</option>
+
             </select>
         </label>
 

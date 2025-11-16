@@ -1,5 +1,6 @@
 <?php
 require 'db.php';
+date_default_timezone_set('Africa/Tunis');
 
 $member_id = isset($_GET['member_id']) ? intval($_GET['member_id']) : (isset($_POST['member_id']) ? intval($_POST['member_id']) : 0);
 if ($member_id <= 0) { header('Location: Afficher.php'); exit; }
@@ -7,38 +8,33 @@ if ($member_id <= 0) { header('Location: Afficher.php'); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start = $_POST['start_date'];
     $end = $_POST['end_date'];
-    $plan = $_POST['plan_name'];
+    $plan = mysql_real_escape_string($_POST['plan_name']);
     $price = floatval($_POST['price']);
 
-    // Archive current active subscription (if any)
-    $cur_res = mysql_query("SELECT * FROM subscriptions WHERE member_id = $member_id AND active = 1");
+    // Archive current active subscription
+    $cur_res = mysql_query("SELECT * FROM subscriptions WHERE member_id=$member_id AND active=1");
     if ($cur_res && mysql_num_rows($cur_res) > 0) {
         $cur = mysql_fetch_assoc($cur_res);
         $note = 'replaced on ' . date('Y-m-d H:i:s');
-        $archive_sql = "INSERT INTO subscription_archive (member_id, start_date, end_date, plan_name, price, note) 
-                        VALUES ($member_id, '{$cur['start_date']}', '{$cur['end_date']}', '{$cur['plan_name']}', {$cur['price']}, '$note')";
-        mysql_query($archive_sql);
-
-        // mark old subscription inactive
-        mysql_query("UPDATE subscriptions SET active = 0 WHERE id = {$cur['id']}");
+        mysql_query("INSERT INTO subscription_archive (member_id, start_date, end_date, plan_name, price, note) 
+                     VALUES ($member_id, '{$cur['start_date']}', '{$cur['end_date']}', '{$cur['plan_name']}', {$cur['price']}, '$note')");
+        mysql_query("UPDATE subscriptions SET active=0 WHERE id={$cur['id']}");
     }
 
     // Insert new subscription
-    $ins_sql = "INSERT INTO subscriptions (member_id, start_date, end_date, plan_name, price, active) 
-                VALUES ($member_id, '$start', '$end', '$plan', $price, 1)";
-    mysql_query($ins_sql);
+    mysql_query("INSERT INTO subscriptions (member_id, start_date, end_date, plan_name, price, active) 
+                 VALUES ($member_id, '$start', '$end', '$plan', $price, 1)");
 
-    // Archive the new subscription snapshot
-    $archive_note = 'new subscription';
+    // Archive new subscription
     mysql_query("INSERT INTO subscription_archive (member_id, start_date, end_date, plan_name, price, note) 
-                 VALUES ($member_id, '$start', '$end', '$plan', $price, '$archive_note')");
+                 VALUES ($member_id, '$start', '$end', '$plan', $price, 'new subscription')");
 
     header("Location: Afficher.php?sub_updated=1");
     exit;
 }
 
 // Show form
-$m_res = mysql_query("SELECT * FROM members WHERE id = $member_id");
+$m_res = mysql_query("SELECT * FROM members WHERE id=$member_id");
 if (!$m_res || mysql_num_rows($m_res) == 0) { header('Location: Afficher.php'); exit; }
 $m = mysql_fetch_assoc($m_res);
 ?>

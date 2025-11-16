@@ -1,5 +1,6 @@
 <?php
 session_start();
+date_default_timezone_set('Africa/Tunis');
 
 // Connect to DB
 $conn = mysql_connect('localhost', 'root', '');

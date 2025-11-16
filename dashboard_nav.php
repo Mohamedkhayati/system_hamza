@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('Africa/Tunis');
+
 $pages = array(
     'dashboard.php' => 'Dashboard',
     'Afficher.php' => 'Membres',

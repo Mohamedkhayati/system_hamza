@@ -1,14 +1,26 @@
 <?php
 require_once 'db.php';
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $today = date('Y-m-d');
+date_default_timezone_set('Africa/Tunis');
 
-// Base query
+// AUTO-UPDATE: mark members as inactive if subscription_end < today
+$update_sql = "
+    UPDATE members m
+    LEFT JOIN subscriptions s ON m.id = s.member_id
+    SET m.active = 0
+    WHERE (m.subscription_end < '$today' OR m.subscription_end IS NULL OR s.active = 0)
+      AND m.archived = 0
+";
+mysql_query($update_sql) or die('Erreur SQL update: ' . mysql_error());
+
+// Fetch non-active members
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
 $sql = "SELECT m.id, m.name, m.age, m.phone, m.subscription_end 
         FROM members m 
         LEFT JOIN subscriptions s ON m.id = s.member_id 
         WHERE (m.subscription_end < '$today' OR m.subscription_end IS NULL OR s.active = 0) 
-        AND m.archived = 0";
+          AND m.archived = 0";
 
 // Add search filter
 if ($search !== '') {
@@ -42,7 +54,9 @@ if (!$res) die('Erreur SQL: ' . mysql_error());
     </form>
 
     <table class="table">
-        <thead><tr><th>Nom</th><th>Âge</th><th>Tél</th><th>Fin</th><th>Action</th></tr></thead>
+        <thead>
+            <tr><th>Nom</th><th>Âge</th><th>Tél</th><th>Fin</th><th>Action</th></tr>
+        </thead>
         <tbody>
         <?php while ($r = mysql_fetch_assoc($res)): ?>
             <tr>

@@ -3,6 +3,7 @@
 // Run daily via cron. PHP 5.4 compatible (mysql_*).
 
 require_once 'db.php';
+date_default_timezone_set('Africa/Tunis');
 
 $today = date('Y-m-d');
 
